@@ -35,14 +35,7 @@ spec:
 
             post {
                 always {
-                    script {
-                        coverage {
-                            sourceFileResolver 'NEVER_STORE'
-                            tools {
-                                cobertura '**/coverage.cobertura.xml'
-                            }
-                        }
-                    }
+                    recordCoverage(tools: [[parser: 'COBERTURA', pattern: '**/*.xml']], sourceDirectories: [[path: 'SimpleWebApi.Test/TestResults']])
                 }
             }
         }
