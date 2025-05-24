@@ -14,7 +14,10 @@ spec:
 """
         }
     }
-
+    environment {
+        IMAGE_NAME = "registry.somepharm.local/SimpleWebApi:${BUILD_NUMBER}"
+        KUBE_CONFIG = credentials('kubeconfig-credential-id') // replace with your actual Jenkins credential ID
+    }
     stages {
         stage('Build') {
             steps {
@@ -47,6 +50,20 @@ spec:
             post {
                 success {
                     archiveArtifacts 'published/*.*'
+                }
+            }
+        }
+        stage('Build and Push Docker Image') {
+            steps {
+                container('dotnet') {
+                    sh """
+                    echo "FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base" > Dockerfile
+                    echo "WORKDIR /app" >> Dockerfile
+                    echo "COPY published/ ./" >> Dockerfile
+
+                    ddocker build -t $IMAGE_NAME .
+                    docker push $IMAGE_NAME
+                    """
                 }
             }
         }
