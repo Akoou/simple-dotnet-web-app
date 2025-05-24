@@ -10,21 +10,26 @@ spec:
     image: mcr.microsoft.com/dotnet/sdk:8.0
     command: [cat]
     tty: true
-    volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
-  - name: docker
-    image: docker:24.0-cli
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
     command: [cat]
     tty: true
     volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
+    - name: kaniko-secret
+      mountPath: /kaniko/.docker
+    - name: kaniko-workdir
+      mountPath: /workspace
   volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
-      type: Socket
+  - name: kaniko-secret
+    projected:
+      sources:
+      - secret:
+          name: docker-config
+          items:
+            - key: .dockerconfigjson
+              path: config.json
+  - name: kaniko-workdir
+    emptyDir: {}
 """
     }
   }
@@ -49,36 +54,30 @@ spec:
           sh 'dotnet test --no-build --no-restore --collect:"XPlat Code Coverage"'
         }
       }
-      post {
-        always {
-          recordCoverage(tools: [[parser: 'COBERTURA', pattern: '**/*.xml']], sourceDirectories: [[path: 'SimpleWebApi.Test/TestResults']])
-        }
-      }
     }
 
     stage('Publish') {
       steps {
         container('dotnet') {
-          sh 'dotnet publish SimpleWebApi --no-restore -o published'
-        }
-      }
-      post {
-        success {
-          archiveArtifacts 'published/*.*'
+          sh 'dotnet publish SimpleWebApi --no-restore -c Release -o /workspace/app'
         }
       }
     }
 
-    stage('Build and Push Docker Image') {
+    stage('Build and Push Image') {
       steps {
-        container('docker') {
+        container('kaniko') {
           sh """
-          echo "FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base" > Dockerfile
-          echo "WORKDIR /app" >> Dockerfile
-          echo "COPY published/ ./" >> Dockerfile
+            echo 'FROM mcr.microsoft.com/dotnet/aspnet:8.0' > /workspace/Dockerfile
+            echo 'WORKDIR /app' >> /workspace/Dockerfile
+            echo 'COPY app/ ./' >> /workspace/Dockerfile
 
-          docker build -t $IMAGE_NAME .
-          docker push $IMAGE_NAME
+            /kaniko/executor \
+              --dockerfile=/workspace/Dockerfile \
+              --context=/workspace \
+              --destination=$IMAGE_NAME \
+              --insecure \
+              --skip-tls-verify
           """
         }
       }
