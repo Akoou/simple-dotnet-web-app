@@ -1,4 +1,4 @@
-pipeline {
+pipeline { 
     agent {
         kubernetes {
             yaml """
@@ -14,6 +14,7 @@ spec:
 """
         }
     }
+
     stages {
         stage('Build') {
             steps {
@@ -24,15 +25,24 @@ spec:
                 }
             }
         }
+
         stage('Test') { 
             steps {
                 container('dotnet') {
-                    sh 'dotnet test --no-build --no-restore --collect "XPlat Code Coverage"'
+                    sh 'dotnet test --no-build --no-restore --collect:"XPlat Code Coverage"'
                 }
             }
+
             post {
                 always {
-                    recordCoverage(tools: [[parser: 'COBERTURA', pattern: '**/*.xml']], sourceDirectories: [[path: 'SimpleWebApi.Test/TestResults']])
+                    script {
+                        coverage {
+                            sourceFileResolver 'NEVER_STORE'
+                            tools {
+                                cobertura '**/coverage.cobertura.xml'
+                            }
+                        }
+                    }
                 }
             }
         }
