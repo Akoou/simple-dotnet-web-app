@@ -1,31 +1,87 @@
 pipeline {
-    agent any 
-    stages {
-        stage('Build') { 
-            steps {
-                sh 'dotnet restore' 
-                sh 'dotnet build --no-restore' 
-            }
-        }
-        stage('Test') { 
-            steps {
-                sh 'dotnet test --no-build --no-restore --collect "XPlat Code Coverage"'
-            }
-            post {
-                always {
-                    recordCoverage(tools: [[parser: 'COBERTURA', pattern: '**/*.xml']], sourceDirectories: [[path: 'SimpleWebApi.Test/TestResults']])
-                }
-            }
-        }
-        stage('Deliver') { 
-            steps {
-                sh 'dotnet publish SimpleWebApi --no-restore -o published' 
-            }
-            post {
-                success {
-                    archiveArtifacts 'published/*.*'
-                }
-            }
-        }
+  agent {
+    kubernetes {
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: dotnet
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    command: [cat]
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  - name: docker
+    image: docker:24.0-cli
+    command: [cat]
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+      type: Socket
+"""
     }
+  }
+
+  environment {
+    IMAGE_NAME = "registry.somepharm.local/SimpleWebApi:${BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Build') {
+      steps {
+        container('dotnet') {
+          sh 'dotnet restore'
+          sh 'dotnet build'
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        container('dotnet') {
+          sh 'dotnet test --no-build --no-restore --collect:"XPlat Code Coverage"'
+        }
+      }
+      post {
+        always {
+          recordCoverage(tools: [[parser: 'COBERTURA', pattern: '**/*.xml']], sourceDirectories: [[path: 'SimpleWebApi.Test/TestResults']])
+        }
+      }
+    }
+
+    stage('Publish') {
+      steps {
+        container('dotnet') {
+          sh 'dotnet publish SimpleWebApi --no-restore -o published'
+        }
+      }
+      post {
+        success {
+          archiveArtifacts 'published/*.*'
+        }
+      }
+    }
+
+    stage('Build and Push Docker Image') {
+      steps {
+        container('docker') {
+          sh """
+          echo "FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base" > Dockerfile
+          echo "WORKDIR /app" >> Dockerfile
+          echo "COPY published/ ./" >> Dockerfile
+
+          docker build -t $IMAGE_NAME .
+          docker push $IMAGE_NAME
+          """
+        }
+      }
+    }
+  }
 }
