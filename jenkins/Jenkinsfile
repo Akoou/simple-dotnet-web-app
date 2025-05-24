@@ -1,10 +1,26 @@
 pipeline {
-    agent any 
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: dotnet
+    image: mcr.microsoft.com/dotnet/sdk:7.0
+    command:
+    - cat
+    tty: true
+"""
+        }
+    }
     stages {
-        stage('Build') { 
+        stage('Build') {
             steps {
-                sh 'dotnet restore' 
-                sh 'dotnet build --no-restore' 
+                container('dotnet') {
+                    sh 'dotnet restore'
+                    sh 'dotnet build --no-restore' 
+                }
             }
         }
     }
