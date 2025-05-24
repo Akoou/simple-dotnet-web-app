@@ -25,7 +25,6 @@ spec:
                 }
             }
         }
-
         stage('Test') { 
             steps {
                 container('dotnet') {
@@ -36,6 +35,18 @@ spec:
             post {
                 always {
                     recordCoverage(tools: [[parser: 'COBERTURA', pattern: '**/*.xml']], sourceDirectories: [[path: 'SimpleWebApi.Test/TestResults']])
+                }
+            }
+        }
+        stage('Deliver') { 
+            steps {
+                container('dotnet') {
+                    sh 'dotnet publish SimpleWebApi --no-restore -o published' 
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts 'published/*.*'
                 }
             }
         }
