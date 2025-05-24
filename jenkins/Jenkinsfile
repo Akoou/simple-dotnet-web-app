@@ -60,7 +60,7 @@ spec:
                     echo "WORKDIR /app" >> Dockerfile
                     echo "COPY published/ ./" >> Dockerfile
 
-                    ddocker build -t $IMAGE_NAME .
+                    docker build -t $IMAGE_NAME .
                     docker push $IMAGE_NAME
                     """
                 }
