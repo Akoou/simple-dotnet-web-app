@@ -8,11 +8,13 @@ spec:
   containers:
   - name: dotnet
     image: mcr.microsoft.com/dotnet/sdk:8.0
-    command: [cat]
+    command: ["sh", "-c"]
+    args: ["sleep infinity"]
     tty: true
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    command: [cat]
+    command: ["/kaniko/executor"]
+    args: ["--help"]
     tty: true
     volumeMounts:
     - name: kaniko-workdir
