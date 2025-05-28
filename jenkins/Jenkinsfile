@@ -6,79 +6,34 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: dotnet
-    image: mcr.microsoft.com/dotnet/sdk:8.0
-    command: [cat]
-    tty: true
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
-    command: [cat]
+  - name: docker
+    image: docker:24
+    securityContext:
+      privileged: true
+    command:
+    - cat
     tty: true
     volumeMounts:
-    - name: kaniko-secret
-      mountPath: /kaniko/.docker
-    - name: kaniko-workdir
-      mountPath: /workspace
+    - name: dockersock
+      mountPath: /var/run/docker.sock
   volumes:
-  - name: kaniko-secret
-    projected:
-      sources:
-      - secret:
-          name: docker-config
-          items:
-            - key: .dockerconfigjson
-              path: config.json
-  - name: kaniko-workdir
-    emptyDir: {}
+  - name: dockersock
+    hostPath:
+      path: /var/run/docker.sock
 """
     }
   }
-
   environment {
     IMAGE_NAME = "registry.somepharm.local/SimpleWebApi:${BUILD_NUMBER}"
   }
-
   stages {
-    stage('Build') {
+    stage('Build & Push Docker Image') {
       steps {
-        container('dotnet') {
-          sh 'dotnet restore'
-          sh 'dotnet build'
-        }
-      }
-    }
-
-    stage('Test') {
-      steps {
-        container('dotnet') {
-          sh 'dotnet test --no-build --no-restore --collect:"XPlat Code Coverage"'
-        }
-      }
-    }
-
-    stage('Publish') {
-      steps {
-        container('dotnet') {
-          sh 'dotnet publish SimpleWebApi --no-restore -c Release -o /workspace/app'
-        }
-      }
-    }
-
-    stage('Build and Push Image') {
-      steps {
-        container('kaniko') {
-          sh """
-            echo 'FROM mcr.microsoft.com/dotnet/aspnet:8.0' > /workspace/Dockerfile
-            echo 'WORKDIR /app' >> /workspace/Dockerfile
-            echo 'COPY app/ ./' >> /workspace/Dockerfile
-
-            /kaniko/executor \
-              --dockerfile=/workspace/Dockerfile \
-              --context=/workspace \
-              --destination=$IMAGE_NAME \
-              --insecure \
-              --skip-tls-verify
-          """
+        container('docker') {
+          sh '''
+            docker build -t $IMAGE_NAME .
+            docker push $IMAGE_NAME
+          '''
         }
       }
     }
