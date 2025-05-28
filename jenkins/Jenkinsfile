@@ -1,80 +1,40 @@
 pipeline {
-  agent {
-    kubernetes {
-      yaml """
-apiVersion: v1
-kind: Pod
-spec:
-  containers:
-  - name: dotnet
-    image: mcr.microsoft.com/dotnet/sdk:8.0
-    command: ["sh", "-c"]
-    args: ["sleep infinity"]
-    tty: true
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
-    command: ["/kaniko/executor"]
-    args: ["--help"]
-    tty: true
-    volumeMounts:
-    - name: kaniko-workdir
-      mountPath: /workspace
-  volumes:
-  - name: kaniko-workdir
-    emptyDir: {}
-"""
+    agent any
+
+    tools {
+        dotnet 'dotnet-9.0'
     }
-  }
 
-  environment {
-    IMAGE_NAME = "registry.somepharm.local/SimpleWebApi:${BUILD_NUMBER}"
-  }
-
-  stages {
-    stage('Build') {
-      steps {
-        container('dotnet') {
-          sh 'dotnet restore'
-          sh 'dotnet build'
+    stages {
+        stage('Restore') {
+            steps {
+                dotnet 'restore'
+            }
         }
-      }
-    }
 
-    stage('Test') {
-      steps {
-        container('dotnet') {
-          sh 'dotnet test --no-build --no-restore --collect:"XPlat Code Coverage"'
+        stage('Build') {
+            steps {
+                dotnet 'build --configuration Release'
+            }
         }
-      }
-    }
 
-    stage('Publish') {
-      steps {
-        container('dotnet') {
-          sh 'dotnet publish SimpleWebApi --no-restore -c Release -o /workspace/app'
+        stage('Test') {
+            steps {
+                dotnet 'test'
+            }
         }
-      }
-    }
 
-    stage('Build and Push Image') {
-      steps {
-        container('kaniko') {
-          sh '''
-            cat <<EOF > /workspace/Dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
-WORKDIR /app
-COPY app/ ./
-EOF
-
-            /kaniko/executor \
-              --dockerfile=/workspace/Dockerfile \
-              --context=/workspace \
-              --destination=$IMAGE_NAME \
-              --insecure \
-              --skip-tls-verify
-          '''
+        stage('Publish') {
+            steps {
+                dotnet 'publish -c Release -o publish'
+            }
         }
-      }
+
+        stage('Deploy') {
+            steps {
+                // Replace this with your actual deployment logic
+                sh 'echo "Deploying to server..."'
+            }
+        }
     }
-  }
 }
